@@ -15,5 +15,14 @@
   "license": "MIT",
   "dependencies": {
     "minimatch": "^3.0.0"
-  }
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zettajs/zetta-events-stream-protocol.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zettajs/zetta-events-stream-protocol/issues"
+  },
+  "homepage": "https://github.com/zettajs/zetta-events-stream-protocol#readme"
 }
