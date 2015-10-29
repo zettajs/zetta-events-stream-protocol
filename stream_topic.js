@@ -13,19 +13,39 @@ var StreamTopic = module.exports = function() {
 StreamTopic.prototype.parse = function(topicString){
   this._original = topicString;
 
-  var previousCharacter = null;
+  var i = 0;
   var currentCharacter = null;
+  var previousCharacter = null;
+  var multilevelWildcard = false;
   var start = 0;
   var topicComponents = [];
-  for(var i = 0; i < topicString.length; i++) {
-    currentCharacter = topicString[i];
+  var str = topicString;
+  while(i < str.length || multilevelWildcard) {
+    var character = str[i];
+    var forwardPeek = null;
+    if(i < str.length) {
+      forwardPeek = str[i+1];  
+    }
+    currentCharacter = character;
     if(currentCharacter === '/' && previousCharacter !== '\\') {
-      topicComponents.push(topicString.slice(start, i));
+      multilevelWildcard = false;
+      topicComponents.push(str.slice(start, i));
       start = i + 1;
-    } else if(i === topicString.length - 1) {
-      topicComponents.push(topicString.slice(start, topicString.length));
+    } else if(currentCharacter === '*' && (previousCharacter === '*' || forwardPeek === '*')) {
+       multilevelWildcard = true; 
+    } else if(i === str.length - 1 && !multilevelWildcard) {
+      topicComponents.push(str.slice(start, str.length));
     }
     previousCharacter = currentCharacter;
+
+    if(multilevelWildcard && topicComponents.length < 4) {
+      topicComponents.push('*');  
+    }
+
+    if(topicComponents.length === 4) {
+      multilevelWildcard = false;
+    }
+    i++;  
   }
 
   if (topicComponents.length < 3 && topicComponents.indexOf('**') === -1) {
