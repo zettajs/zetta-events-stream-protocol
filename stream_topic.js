@@ -1,156 +1,105 @@
-var minimatch = require('minimatch');
+var minimatch = require('minimatch-with-regex');
+var Minimatch = minimatch.Minimatch;
+
+// Zetta topics that don't follow {server}/{deviceType}/{deviceId}/{stream}
+var SPECIAL = [
+  /^_peer\/.+$/,
+  /^query:.+$/,
+  /^query\/.+$/,
+  /^logs$/
+];
 
 var StreamTopic = module.exports = function() {
-  this.serverName = null;
-  this.deviceType = null;
-  this.deviceId = null;
-  this.streamName = null;
-  this.streamQuery =  null;
   this._original = null;
-  this._useComponents = false;
-}
+  this._mm = null;
+
+  // Matches a special topic
+  this.isSpecial = false;
+  
+  // Stream Query
+  this.streamQuery = null;
+
+  this._serverName = null;
+  this._pubsubIdentifier = null;
+};
 
 StreamTopic.prototype.parse = function(topicString){
-  this._original = topicString;
-
-  var previousCharacter = null;
-  var currentCharacter = null;
-  var start = 0;
-  var topicComponents = [];
-  for(var i = 0; i < topicString.length; i++) {
-    currentCharacter = topicString[i];
-    if(currentCharacter === '/' && previousCharacter !== '\\') {
-      topicComponents.push(topicString.slice(start, i));
-      start = i + 1;
-    } else if(i === topicString.length - 1) {
-      topicComponents.push(topicString.slice(start, topicString.length));
-    }
-    previousCharacter = currentCharacter;
+  if (typeof topicString !== 'string') {
+    throw new TypeError('topic string must be a string');
   }
 
-  if (topicComponents.length < 3 && topicComponents.indexOf('**') === -1) {
+  if (topicString === '') {
+    throw new Error('topic string must not be an empty string');
+  }
+
+  this._original = topicString;
+
+  this.isSpecial = SPECIAL.some(function(regExp) {
+    return regExp.exec(topicString);
+  });
+
+  // Using special topic
+  if (this.isSpecial) {
+    this._mm = new Minimatch(topicString, { nobrace: false, dot: true, noext: true });
     return;
   }
 
-  if (topicComponents.length === 3) {
-    topicComponents.unshift(null);
+  // seperate streamQuery from topic
+  var seperated = this._seperateStreamQuery(topicString);
+  this._mm = new Minimatch(seperated.topic, { nobrace: false, dot: true, noext: true });
+  this.streamQuery = seperated.streamQuery;
+
+  // Parse server name from topic
+  var serverName = this._mm.set[0][0];
+  if (typeof serverName === 'string') {
+    this._serverName = serverName;
+  } else if (serverName instanceof RegExp) {
+    this._serverName = serverName;
+  } else if (typeof serverName === 'object' && Object.keys(serverName).length === 0) {
+    // ** star case, make regexp to match everything
   }
 
-  function checkForRegex(s) {
-    if (typeof s === 'string') {
-      if(s[0] === '{' && s[s.length - 1] === '}') {
-        var regexString = s.slice(1, -1);
-        regexString = '^' + regexString + '$';
-        return new RegExp(regexString);
-      } else {
-        return s;  
-      }
+
+  // Join the rest of the topic for the pubsub identifier without the servername
+  var arr = [];
+  for (var i=1; i<this._mm.set[0].length; i++) {
+    var c = this._mm.set[0][i];
+    if (typeof c === 'string') {
+      arr.push(c);
+    } else if (c instanceof RegExp) {
+      arr.push(c._glob);
+    } else if (typeof c === 'object' && Object.keys(c).length === 0) {
+      arr.push('**');
     }
   }
 
-  // led/123/state
-  // _peer/connect
-  // _peer/disconnect
-  // query:asdasd
-  // query/asd
-  this._useComponents = true;
-  this.serverName = checkForRegex(topicComponents[0]);
-  this.deviceType = checkForRegex(topicComponents[1]);
-  this.deviceId = checkForRegex(topicComponents[2]);
-  if(topicComponents[3]) {
-    var streamComponents = topicComponents[3].split('?');
-    this.streamName = checkForRegex(streamComponents[0]);
-    if (streamComponents[1]) {
-      this.streamQuery = streamComponents[1];
-    }
-  } else {
-    this.streamName = undefined;  
-  }
-}
+  this._pubsubIdentifier = arr.join('/');
+};
 
+// Returns string format of the topic
 StreamTopic.prototype.hash = function() {
   return this._original;
 };
 
+// Return topic but emitting the first path which is the serverName
 StreamTopic.prototype.pubsubIdentifier = function() {
-
-  function sanitizeRegex(part) {
-    if (part instanceof RegExp) {
-      return '{' + part.source + '}';
-    } else {
-      return part;
-    }
-  }
-  
-  if (this._useComponents) {
-    return sanitizeRegex(this.deviceType) + '/' + sanitizeRegex(this.deviceId) + '/' + sanitizeRegex(this.streamName);
-  } else {
+  if (this.isSpecial) {
     return this._original;
+  } else {
+    return this._pubsubIdentifier;
+  }
+};
+
+StreamTopic.prototype.serverName = function(topicString) {
+  if (this.isSpecial) {
+    return null;
+  } else {
+    return this._serverName;
   }
 };
 
 StreamTopic.prototype.match = function(topicString) {
-  if (this._useComponents) {
-    var components = [ this.serverName, this.deviceType, this.deviceId, this.streamName ].filter(function(i) { return i !== undefined });;
-    var checkedComponents = [];
-    var topicStringComponents = [];
-    var checkTopic = StreamTopic.parse(topicString);
-    var checkComponents = [ checkTopic.serverName, checkTopic.deviceType, checkTopic.deviceId, checkTopic.streamName ].filter(function(i) { return i !== undefined });
-    var matchStart = null;
-
-    //{^Det.+$}/led/**
-    //[RegExp, String]
-    //['Detroit-123', 'led/123/state']
-    //RegExp -> 'Detroit-123' && String -> 'led/123/state'
-    
-
-    //{^Det.+$}/led/*/{^sta.+$}
-    //[RegExp, String, RegExp]
-    //['Detroit-123', 'led/123', 'state']
-    //RegExp -> 'Detroit-123' && String -> 'led/123/state' && RegExp -> 'state'
-
-    //{^Det.+$}/**/{^stream.+$}
-    //[RegExp, String, RegExp]
-    //['Detroit-123', 'led/123', 'stream-123']
-  
-    components.forEach(function(component, idx) {
-      if (component instanceof RegExp) {
-        if(matchStart !== null) {
-          var checkedComponent = components.slice(matchStart, idx).join('/');
-          checkedComponents.push(checkedComponent);
-          if(checkedComponent === '**' && components.length < 4) {
-            topicStringComponents.push(checkComponents.slice(matchStart, idx + 1).join('/'));   
-            topicStringComponents.push(checkComponents[idx + 1]);
-            return;
-          } else {
-            topicStringComponents.push(checkComponents.slice(matchStart, idx).join('/'));
-          }
-          matchStart = null;
-        }
-        checkedComponents.push(component);
-        topicStringComponents.push(checkComponents[idx]);
-      } else if(component !== undefined) {
-        if(matchStart === null) {
-          matchStart = idx;
-        }
-        if(idx === components.length - 1) {
-          checkedComponents.push(components.slice(matchStart).join('/'));   
-          topicStringComponents.push(checkComponents.slice(matchStart).join('/'));
-        }
-      }
-    });
-
-    return checkedComponents.every(function(component, idx) {
-      var topicComponent = topicStringComponents[idx];    
-      if(component instanceof RegExp) {
-        return component.exec(topicComponent);  
-      } else {
-        return minimatch(topicComponent, component);  
-      }
-    }); 
-  } else {
-    return minimatch(topicString, this._original);
-  }
+  return this._mm.match(topicString);
 };
 
 StreamTopic.parse = function(topicString) {
@@ -158,3 +107,27 @@ StreamTopic.parse = function(topicString) {
   topic.parse(topicString);
   return topic;
 }
+
+StreamTopic.prototype._seperateStreamQuery = function(topicString) {
+  var ret = { topic: null, streamQuery: null };
+  var idx = topicString.lastIndexOf('?');
+  if (idx < 0) {
+    ret.topic = topicString;
+    return ret;
+  }
+
+  // make sure it's not in a regex
+  var closeIdx = topicString.indexOf('}', idx);
+  var openIdx = topicString.indexOf('{', 0);
+  if (idx >openIdx && idx < closeIdx) {
+    // Falls in a regex
+    ret.topic = topicString;
+    return ret;
+  }
+
+  ret.topic = topicString.slice(0, idx);
+  ret.streamQuery = topicString.slice(idx+1);
+
+  return ret;
+};
+

@@ -14,7 +14,7 @@
   "author": "Adam Magaluk <AdamMagaluk@gmail.com>",
   "license": "MIT",
   "dependencies": {
-    "minimatch": "^3.0.0"
+    "minimatch-with-regex": "^3.0.0"
   },
   "devDependencies": {},
   "repository": {
