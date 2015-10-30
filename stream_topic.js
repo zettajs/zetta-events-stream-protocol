@@ -57,6 +57,7 @@ StreamTopic.prototype.parse = function(topicString){
     this._serverName = serverName;
   } else if (typeof serverName === 'object' && Object.keys(serverName).length === 0) {
     // ** star case, make regexp to match everything
+    this._serverName = '*';
   }
 
 
