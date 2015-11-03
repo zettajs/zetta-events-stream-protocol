@@ -44,6 +44,11 @@ StreamTopic.prototype.parse = function(topicString){
     return;
   }
 
+  // Reformat topic string to have server as * the topic as **
+  if (topicString === '**') {
+    topicString = '*/**';
+  }
+
   // seperate streamQuery from topic
   var seperated = this._seperateStreamQuery(topicString);
   this._mm = new Minimatch(seperated.topic, { nobrace: false, dot: true, noext: true });
@@ -59,7 +64,6 @@ StreamTopic.prototype.parse = function(topicString){
     // ** star case, make regexp to match everything
     this._serverName = '*';
   }
-
 
   // Join the rest of the topic for the pubsub identifier without the servername
   var arr = [];
