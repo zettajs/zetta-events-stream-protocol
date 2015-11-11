@@ -63,6 +63,13 @@ StreamTopic.prototype.parse = function(topicString){
   } else if (typeof serverName === 'object' && Object.keys(serverName).length === 0) {
     // ** star case, make regexp to match everything
     this._serverName = '*';
+
+    // Handle cases with leading **/some-topic
+    // Check to make sure there is something after ** and make sure it's not just **/
+    // If full topic is specified after ** dont add ** to begening. eg. "**/led/123/state"
+    if (this._mm.set[0].length > 1 && this._mm.set[0].length < 4 && this._mm.set[0][1] !== '') {
+      this._mm.set[0].unshift({});
+    }
   }
 
   // Join the rest of the topic for the pubsub identifier without the servername
