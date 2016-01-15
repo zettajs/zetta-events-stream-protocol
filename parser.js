@@ -34,8 +34,10 @@ EventStreamParser.prototype.validate = function(json) {
     'error': { code: 'number', timestamp: 'number', topic: 'string' },
     'subscribe-ack': { timestamp: 'number', subscriptionId: 'number', topic: 'string' },
     'unsubscribe-ack': { timestamp: 'number', subscriptionId: 'number' },
-    'event': { topic: 'string', timestamp: 'number', subscriptionId: 'number'} 
-  }
+    'event': { topic: 'string', timestamp: 'number', subscriptionId: 'number'},
+    'ping': {}, // optional data parameter can be sent
+    'pong': {} // optional data parameter can be sent
+  };
 
   var keys = properties[json.type];
   var valid = true; 
